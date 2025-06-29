@@ -107,8 +107,7 @@ def get_optimizer(model, args):
 
 
 def get_datasets(args):
-    if args.dset.backend:
-        torchaudio.set_audio_backend(args.dset.backend)
+    # Torchaudio ≥2.1 uses dispatcher (global backend selection deprecated)
     if args.dset.use_musdb:
         train_set, valid_set = get_musdb_wav_datasets(args.dset)
     else:

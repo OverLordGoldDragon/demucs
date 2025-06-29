@@ -42,8 +42,10 @@ def _track_metadata(track, sources, normalize=True, ext=EXT):
                 audio += sub_audio
             would_clip = audio.abs().max() >= 1
             if would_clip:
-                assert ta.get_audio_backend() == 'soundfile', 'use dset.backend=soundfile'
-            ta.save(file, audio, sr, encoding='PCM_F')
+                # Save as float PCM to avoid clipping (force SoundFile backend)
+                ta.save(file, audio, sr, encoding='PCM_F', backend='soundfile')
+            else:
+                ta.save(file, audio, sr)
 
         try:
             info = ta.info(str(file))
@@ -109,7 +111,7 @@ class Wavset:
             self,
             root, metadata, sources,
             segment=None, shift=None, normalize=True,
-            samplerate=44100, channels=2, ext=EXT):
+            samplerate=44100, channels=2, ext=EXT, backend=None):
         """
         Waveset (or mp3 set for that matter). Can be used to train
         with arbitrary sources. Each track should be one folder inside of `path`.
@@ -140,6 +142,7 @@ class Wavset:
         self.channels = channels
         self.samplerate = samplerate
         self.ext = ext
+        self.backend = backend
         self.num_examples = []
         for name, meta in self.metadata.items():
             track_duration = meta['length'] / meta['samplerate']
@@ -169,7 +172,8 @@ class Wavset:
             wavs = []
             for source in self.sources:
                 file = self.get_file(name, source)
-                wav, _ = ta.load(str(file), frame_offset=offset, num_frames=num_frames)
+                wav, _ = ta.load(str(file), frame_offset=offset, num_frames=num_frames,
+                                 **({"backend": self.backend} if self.backend else {}))
                 wav = convert_audio_channels(wav, self.channels)
                 wavs.append(wav)
 
@@ -206,10 +210,10 @@ def get_wav_datasets(args, name='wav'):
     train_set = Wavset(train_path, train, args.sources,
                        segment=args.segment, shift=args.shift,
                        samplerate=args.samplerate, channels=args.channels,
-                       normalize=args.normalize)
+                       normalize=args.normalize, backend=getattr(args, 'backend', None))
     valid_set = Wavset(valid_path, valid, [MIXTURE] + list(args.sources),
                        samplerate=args.samplerate, channels=args.channels,
-                       normalize=args.normalize, **kw_cv)
+                       normalize=args.normalize, backend=getattr(args, 'backend', None), **kw_cv)
     return train_set, valid_set
 
 
@@ -247,8 +251,8 @@ def get_musdb_wav_datasets(args):
     train_set = Wavset(root, metadata_train, args.sources,
                        segment=args.segment, shift=args.shift,
                        samplerate=args.samplerate, channels=args.channels,
-                       normalize=args.normalize)
+                       normalize=args.normalize, backend=getattr(args, 'backend', None))
     valid_set = Wavset(root, metadata_valid, [MIXTURE] + list(args.sources),
                        samplerate=args.samplerate, channels=args.channels,
-                       normalize=args.normalize, **kw_cv)
+                       normalize=args.normalize, backend=getattr(args, 'backend', None), **kw_cv)
     return train_set, valid_set
